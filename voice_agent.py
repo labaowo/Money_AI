@@ -1,3 +1,4 @@
+# Version 2.0 - 20組金鑰解封安全審查完全體版
 import os
 import time
 import re
