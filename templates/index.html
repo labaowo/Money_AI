@@ -73,7 +73,8 @@
                 word-break: break-all; /* ⚡ 自動變身：連特殊符號都能精準斷行 */
             }
         }
-        .chat-input-area { background: #0f172a; padding: 16px; border-top: 1px solid #334155; display: flex; gap: 12px; align-items: center; margin-top: auto; }
+        .chat-input-area { background: #0f172a; padding: 16px; border-top: 1px solid #334155; display: flex; gap: 12px; align-items: center; }
+        .chat-container { flex: 1; background: #1e293b; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); border: 1px solid #334155; overflow: hidden; height: 100%; }
         .file-upload-label { cursor: pointer; color: #38bdf8; font-size: 26px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #1e293b; border: 1px solid #334155; transition: 0.2s; flex-shrink: 0; margin-bottom: 0; }
         #image-input { display: none; }
         textarea { flex: 1; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px; color: #fff; resize: none; height: 42px; font-size: 14px; outline: none; overflow-y: auto; transition: height 0.1s ease; }
@@ -114,14 +115,19 @@
             </div>
             <div class="chat-messages" id="chat-box">
                 <div class="message money">哈囉！我是 Money。有甚麼需要為你服務的嗎?💻</div>
+            </div> <!-- ✨ 修正：把訊息區在這裡就關閉，不讓它吞掉下面的發送條 -->
+            <div id="preview-box">
+                🖼️ <span id="file-name"></span>
+                <span style="cursor:pointer;margin-left:auto;font-weight:bold;font-size:18px;" onclick="clearFile()">✕</span>
+            </div>
             <div class="chat-input-area">
                 <label class="file-upload-label" for="image-input" title="上傳 Bug 截圖或照片">📎</label>
                 <input type="file" id="image-input" accept="image/*" onchange="previewImage(this)">
                 <textarea id="user-input" placeholder="輸入訊息... (Enter 發送)"></textarea>
                 <button class="send-btn" onclick="sendMessage()">發送</button>
             </div>
-        </div>
-    </div>
+        </div> <!-- ✨ 修正：這是右側大面板 chat-container 的大外殼結尾 -->
+    </div> <!-- ✨ 修正：這是全網頁最外層 main-wrapper 的結尾 -->
     <script>
         const chatBox = document.getElementById('chat-box');
         const userInput = document.getElementById('user-input');
