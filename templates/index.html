@@ -186,13 +186,11 @@
             const text = userInput.value.trim();
             if (!text) return;
 
-            // 1. 正常畫出你的藍色對話框（在右邊）
             appendMessage(text, 'user');
             
             userInput.value = '';
             userInput.style.height = '42px';
 
-            // 2. 正常畫出 AI 的灰色等待框（在左邊）
             const loadingId = appendMessage('⏳ Money 正在用多模態大腦解析中...', 'money');
             const formData = new FormData();
             formData.append('text', text);
@@ -201,11 +199,12 @@
                 const response = await fetch('/web-chat', { method: 'POST', body: formData });
                 const data = await response.json();
                 
-                // 3. 把剛才的灰色等待框移除，換成 AI 真正的回答
                 const loadBox = document.getElementById(loadingId);
                 if (loadBox) loadBox.remove();
                 
-                appendMessage(formatResponse(data.reply), 'money');
+                // ✨ 終極防護防線：如果大腦抽風吐回空字串，自動塞入預設安全對話，阻絕隱形透明框！
+                const finalReply = (data && data.reply && data.reply.trim()) ? data.reply : "⚠️ 大腦金鑰輪替中，請再對我說一次剛才的話喔！";
+                appendMessage(formatResponse(finalReply), 'money');
             } catch (err) {
                 const loadBox = document.getElementById(loadingId);
                 if (loadBox) loadBox.innerHTML = "⚠️ 雲端連線異常，請稍後再試。";
