@@ -332,30 +332,42 @@ def web_index():
     except Exception:
         return "🟢 Money AI 伺服器已在雲端安全上線！", 200
 
-# 網頁通道二：處理電腦網頁發送過來的文字與照片，並用同一個大腦回應
+# ==================== 【🌐 雲端電腦網頁版端點（防呆抓漏絕對修正版）】 ====================
 @app.route("/web-chat", methods=['POST'])
 def web_chat():
-    user_text = request.form.get('text', '')
+    # 💡 修正：地毯式防呆搜索！不管前端欄位叫 text、msg、message 還是內容，通通都抓！
+    user_text = request.form.get('text', request.form.get('msg', request.form.get('message', ''))).strip()
     image_file = request.files.get('image')
     web_user_id = "web_platform_user" 
     
-    print(f"🌐 [網頁端請求] 收到訊息: {user_text}", flush=True)
+    # 照妖鏡 2 號：在路由最上方強制列印前端到底送了什麼過來！
+    print(f"🌐 [網頁端傳輸攔截] 收到文字欄位: '{user_text}', 是否有帶圖片: {image_file is not None}", flush=True)
     
-    if "漏動指令：" in user_text:
-        real_cmd = user_text.replace("漏動指令：", "")
-        _ = ask_jarvis(web_user_id, content_part=real_cmd)
-        return jsonify({"reply": "📂 【專案配置成功鎖定】Money 已將左側專案架構永久鎖定！右側對話可以毫無顧慮地開發囉！"})
+    # 如果真的什麼都沒有傳過來，強制塞入警示文字發給大腦，不讓它當機
+    if not user_text and not image_file:
+        user_text = "嗨，Money！我剛剛點擊了網頁，請跟我打個招呼並自我介紹。"
+
+    if "漏動指令：" in user_text or "記憶專案：" in user_text:
+        real_cmd = user_text.replace("漏動指令：", "記憶專案：")
+        reply_text = ask_jarvis(web_user_id, content_part=real_cmd)
+        return jsonify({"reply": reply_text})
         
     if user_text == "刪除專案":
-        _ = ask_jarvis(web_user_id, content_part="刪除專案")
-        return jsonify({"reply": "🗑️ 【專案記憶已清空】目前的專案架構已從永久記憶區抹除囉！"})
+        reply_text = ask_jarvis(web_user_id, content_part="刪除專案")
+        return jsonify({"reply": reply_text})
 
+    # 正確導向大腦核心
     if image_file:
-        image_bytes = image_file.read()
-        reply_text = ask_jarvis(web_user_id, content_part=image_bytes, mime_type='image/jpeg')
+        try:
+            image_bytes = image_file.read()
+            reply_text = ask_jarvis(web_user_id, content_part=image_bytes, mime_type='image/jpeg')
+        except Exception as img_err:
+            print(f"❌ 網頁讀取圖片位元組失敗: {img_err}", flush=True)
+            reply_text = ask_jarvis(web_user_id, content_part=user_text)
     else:
         reply_text = ask_jarvis(web_user_id, content_part=user_text)
         
+    print(f"📡 [網頁端準備回傳] AI 解答長度: {len(reply_text)} 字。", flush=True)
     return jsonify({"reply": reply_text})
 
 # ==================== 【🚀 系統主程式啟動大門】 ====================
