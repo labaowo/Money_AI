@@ -240,15 +240,16 @@ def handle_text_message(event):
     send_dual_reply(event.reply_token, reply_text)
     print(f"📤 已將【文字解答 + 口語解說語音】同步傳回手機！", flush=True)
 
-# 5. 【通道二】處理「語音訊息」
+# 5. 【通道二】處理「語音訊息」（完美升級：FFmpeg 轉檔相容晶片版）
 @handler.add(MessageEvent, message=AudioMessageContent)
 def handle_audio_message(event):
     user_id = event.source.user_id
     message_id = event.message.id
-    print(f"\n🎙️ 收到來自用戶的 LINE 語音！正在嘗試下載並轉譯大腦...", flush=True)
+    print(f"\n🎙️ 收到來自用戶的 LINE 語音！正在進行 M4A 轉 MP3 轉譯...", flush=True)
     
     clean_expired_audio_files()
     temp_audio_path = f"{message_id}.m4a"
+    output_mp3_path = f"{message_id}.mp3" # 👈 新增：轉檔後的標準 MP3 輸出路徑
     
     with ApiClient(configuration) as api_client:
         messaging_api_blob = MessagingApiBlob(api_client)
@@ -257,12 +258,22 @@ def handle_audio_message(event):
             fd.write(message_content)
             
     try:
-        with open(temp_audio_path, "rb") as f:
+        # ⚡ 核心解法：調用伺服器底層的 ffmpeg，強行將 LINE 語音壓縮為標準 MP3 格式
+        import subprocess
+        subprocess.run(['ffmpeg', '-y', '-i', temp_audio_path, '-acodec', 'libmp3lame', output_mp3_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        # 檢查轉檔後的 MP3 是否成功存在
+        target_path = output_mp3_path if os.path.exists(output_mp3_path) else temp_audio_path
+        target_mime = 'audio/mp3' if os.path.exists(output_mp3_path) else 'audio/m4a'
+        
+        with open(target_path, "rb") as f:
             audio_bytes = f.read()
             
-        reply_text = ask_jarvis(user_id, content_part=audio_bytes, mime_type='audio/m4a')
+        # 傳送完美的 audio/mp3 給 Gemini 大腦，保證一秒聽懂
+        reply_text = ask_jarvis(user_id, content_part=audio_bytes, mime_type=target_mime)
         send_dual_reply(event.reply_token, reply_text)
-        print(f"📤 已將【聽懂語音的解答 + 口語解說語音】同步傳回手機！", flush=True)
+        print(f"📤 已將【聽懂 MP3 語音的解答 + 口語解說語音】同步傳回手機！", flush=True)
+        
     except Exception as e:
         print(f"❌ 語音識別核心崩潰: {e}", flush=True)
         with ApiClient(configuration) as api_client:
@@ -274,8 +285,9 @@ def handle_audio_message(event):
                 )
             )
     finally:
-        if os.path.exists(temp_audio_path):
-            os.remove(temp_audio_path)
+        # 清乾淨兩份暫存檔，死守硬碟空間
+        if os.path.exists(temp_audio_path): os.remove(temp_audio_path)
+        if os.path.exists(output_mp3_path): os.remove(output_mp3_path)
 
 # 6. 【通道三】處理「圖片/照片訊息」
 @handler.add(MessageEvent, message=ImageMessageContent)
