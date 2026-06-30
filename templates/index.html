@@ -184,31 +184,31 @@
 
         async function sendMessage() {
             const text = userInput.value.trim();
-            const file = imageInput.files[0];
-            if (!text && !file) return;
+            if (!text) return;
 
-            if (text) { appendMessage(text, 'user'); } 
-            else if (file) { appendMessage(`🖼️ 已發送一張生活照片/Bug 截圖`, 'user'); }
+            // 1. 正常畫出你的藍色對話框（在右邊）
+            appendMessage(text, 'user');
             
             userInput.value = '';
             userInput.style.height = '42px';
-            clearFile();
 
+            // 2. 正常畫出 AI 的灰色等待框（在左邊）
             const loadingId = appendMessage('⏳ Money 正在用多模態大腦解析中...', 'money');
             const formData = new FormData();
             formData.append('text', text);
-            if (file) formData.append('image', file);
 
             try {
                 const response = await fetch('/web-chat', { method: 'POST', body: formData });
                 const data = await response.json();
                 
-                // ✨ 核心修正：不要用 remove() 拆房子，直接把等待動畫的「文字」原位替換成 AI 的回答！
+                // 3. 把剛才的灰色等待框移除，換成 AI 真正的回答
                 const loadBox = document.getElementById(loadingId);
-                if (loadBox) { loadBox.innerHTML = formatResponse(data.reply); }
+                if (loadBox) loadBox.remove();
+                
+                appendMessage(formatResponse(data.reply), 'money');
             } catch (err) {
                 const loadBox = document.getElementById(loadingId);
-                if (loadBox) { loadBox.innerHTML = "⚠️ 雲端連線異常，請稍後再試。"; }
+                if (loadBox) loadBox.innerHTML = "⚠️ 雲端連線異常，請稍後再試。";
             }
         }
 
