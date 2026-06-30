@@ -176,11 +176,14 @@
         }
 
         function formatResponse(text) {
+            const blocks = [];
             let formatted = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
                 const safe = btoa(unescape(encodeURIComponent(code)));
-                return `<pre><code>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code><button class="copy-btn" onclick="navigator.clipboard.writeText(decodeURIComponent(escape(atob('${safe}'))));alert('程式碼複製成功！')">複製</button></pre>`;
+                blocks.push(`<pre><code>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code><button class="copy-btn" onclick="navigator.clipboard.writeText(decodeURIComponent(escape(atob('${safe}'))));alert('程式碼複製成功！')">複製</button></pre>`);
+                return `__CODE_BLOCK_${blocks.length - 1}__`;
             });
-            return formatted.split(/(<pre>[\s\S]*?<\/pre>)/g).map(p => p.startsWith('<pre>') ? p : p.replace(/\n/g, '<br>')).join('');
+            formatted = formatted.replace(/\n/g, '<br>');
+            return formatted.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => blocks[index]);
         }
 </script>
 </body>
