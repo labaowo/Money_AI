@@ -188,9 +188,10 @@
             if (!text && !file) return;
 
             if (text) { appendMessage(text, 'user'); } 
-            else if (file) { appendMessage(`🖼️ 已發送一張照片/Bug 截圖`, 'user'); }
+            else if (file) { appendMessage(`🖼️ 已發送一張生活照片/Bug 截圖`, 'user'); }
             
             userInput.value = '';
+            userInput.style.height = '42px';
             clearFile();
 
             const loadingId = appendMessage('⏳ Money 正在用多模態大腦解析中...', 'money');
@@ -201,10 +202,13 @@
             try {
                 const response = await fetch('/web-chat', { method: 'POST', body: formData });
                 const data = await response.json();
-                document.getElementById(loadingId).remove();
-                appendMessage(formatResponse(data.reply), 'money');
+                
+                // ✨ 核心修正：不要用 remove() 拆房子，直接把等待動畫的「文字」原位替換成 AI 的回答！
+                const loadBox = document.getElementById(loadingId);
+                if (loadBox) { loadBox.innerHTML = formatResponse(data.reply); }
             } catch (err) {
-                document.getElementById(loadingId).innerHTML = "⚠️ 雲端連線異常，請稍後再試。";
+                const loadBox = document.getElementById(loadingId);
+                if (loadBox) { loadBox.innerHTML = "⚠️ 雲端連線異常，請稍後再試。"; }
             }
         }
 
