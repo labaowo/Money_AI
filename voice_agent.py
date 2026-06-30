@@ -38,22 +38,18 @@ app = Flask(__name__)
 configuration = Configuration(access_token=os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
-# 2. API 金鑰輪替設定（自動抓取多個專案金鑰）
+# 2. API 金鑰輪替設定（安全地毯式點名法：完美破解 Render 變數排序錯亂問題）
 API_KEYS = []
-key_index = 1
-while True:
-    key = os.getenv(f"GEMINI_API_KEY_{key_index}")
-    if key:
-        API_KEYS.append(key)
-        key_index += 1
-    else:
-        break
+for idx in range(1, 21):  # 精準點名 1 到 20 號環境變數
+    key = os.getenv(f"GEMINI_API_KEY_{idx}")
+    if key and key.strip():
+        API_KEYS.append(key.strip())
 
 if not API_KEYS and os.getenv("GEMINI_API_KEY"):
-    API_KEYS.append(os.getenv("GEMINI_API_KEY"))
+    API_KEYS.append(os.getenv("GEMINI_API_KEY").strip())
 
-# 💡 核心修正：加上 flush=True 確保 Render 初始化日誌瞬間跳出！
-print(f"🔑 系統初始化成功：已載入 {len(API_KEYS)} 組 API 金鑰進行自動輪替。", flush=True)
+# 💡 加上 flush=True 讓 Render 網頁日誌在開機時，立刻吐出到底成功抓到了幾把鑰匙！
+print(f"🔑 系統初始化成功：地毯式搜索完畢！已成功載入 {len(API_KEYS)} 組完全獨立的 API 金鑰進行輪替。", flush=True)
 
 current_key_idx = 0
 USER_CHAT_HISTORIES = {}
