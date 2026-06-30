@@ -85,33 +85,34 @@ def clean_expired_audio_files():
     except Exception as e:
         print(f"⚠️ 清理舊檔案時發生異常: {e}", flush=True)
 
-# 🧠 核心思考中樞：升級為「專案永久記憶」雙軌大腦（全面加上 flush=True）
+# 🧠 核心思考中樞：絕對防禦重置版（徹底解決進入迴圈前的截斷死角）
 def ask_jarvis(user_id, content_part, mime_type=None):
     global current_key_idx, USER_CHAT_HISTORIES, USER_PROJECT_NOTES
     
-    if user_id not in USER_CHAT_HISTORIES: USER_CHAT_HISTORIES[user_id] = []
-    if user_id not in USER_PROJECT_NOTES: USER_PROJECT_NOTES[user_id] = ""
-        
+    # 1. 每次呼叫，強制在函數內部初始化區域變數，絕不共用狀態
     failed_keys_count = 0
     success = False
     reply_text = "⚠️ 賈維斯大腦目前嚴重超載，請幫我等待 30 秒後再試一次喔！"
+    
+    if user_id not in USER_CHAT_HISTORIES: USER_CHAT_HISTORIES[user_id] = []
+    if user_id not in USER_PROJECT_NOTES: USER_PROJECT_NOTES[user_id] = ""
 
-    # 💡 檢查使用者是否輸入了特殊的特殊控制指令
+    # 2. 檢查使用者特殊指令
     if not mime_type and isinstance(content_part, str):
         if content_part.startswith("記憶專案：") or content_part.startswith("記憶專案:"):
             project_detail = content_part.split("：", 1)[-1].split(":", 1)[-1].strip()
             USER_PROJECT_NOTES[user_id] = project_detail
             print(f"📝 用戶 {user_id} 成功鎖定永久專案記憶。", flush=True)
-            return f"📂 【專案記憶成功】Money 已將此專案架構永久鎖定在核心記憶區！所有回答都必須圍繞此規格：\n\n📌 架構：\n{project_detail}"
+            return f"📂 【專案記憶成功】Money 已將此專案架構永久鎖定！\n\n📌 架構：\n{project_detail}"
         
         if content_part.strip() == "刪除專案":
             if USER_PROJECT_NOTES[user_id]:
                 USER_PROJECT_NOTES[user_id] = ""
                 print(f"🗑️ 用戶 {user_id} 已手動清空永久專案記憶。", flush=True)
-                return "🗑️ 【專案記憶已清空】Money 已經把目前的專案架構從永久記憶區抹除囉！"
+                return "🗑️ 【專案記憶已清空】目前的專案架構已從永久記憶區抹除囉！"
             return "❌ 報告主人，目前本來就沒有綁定任何專案喔！"
 
-    # 📥 包裝多模態與純文字數據
+    # 3. 數據格式封裝
     if mime_type:
         user_part = types.Part.from_bytes(data=content_part, mime_type=mime_type)
         if 'audio' in mime_type:
@@ -133,13 +134,16 @@ def ask_jarvis(user_id, content_part, mime_type=None):
     if USER_PROJECT_NOTES[user_id]:
         base_instruction += f"\n\n🚨【重要專案架構，回答必須圍繞此規格】：\n{USER_PROJECT_NOTES[user_id]}"
 
-    # 開始輪替金鑰思考（完美修正新版 SDK 安全設定與模型規格）
-    while failed_keys_count < max(len(API_KEYS), 1) and not success:
+    # 🎯 照妖鏡日誌：強制印出目前陣列長度與計數器，抓出為什麼不進迴圈
+    print(f"📡 [準備進入思考迴圈] 用戶: {user_id}, 金鑰總數: {len(API_KEYS)}, 當前失敗計數: {failed_keys_count}, 成功狀態: {success}", flush=True)
+
+    # 4. 核心金鑰輪替重試迴圈
+    total_keys = len(API_KEYS) if len(API_KEYS) > 0 else 1
+    while failed_keys_count < total_keys and not success:
         try:
-            print(f"🧠 [嘗試中] 正在使用第 {current_key_idx + 1} 把金鑰思考... (目前累計失敗: {failed_keys_count})", flush=True)
+            print(f"🧠 [嘗試中] 正在使用第 {current_key_idx + 1} 把金鑰思考... (目前累計失敗: {failed_keys_count}/{total_keys})", flush=True)
             client = get_current_client()
             
-            # 🔥 修正 1：全面改用免費額度最大、最穩定的 gemini-2.5-flash 模型
             chat = client.chats.create(
                 model='gemini-2.5-flash',
                 history=USER_CHAT_HISTORIES[user_id],
@@ -147,7 +151,6 @@ def ask_jarvis(user_id, content_part, mime_type=None):
                     system_instruction=base_instruction,
                     tools=[types.Tool(google_search=types.GoogleSearch())],
                     temperature=0.2,
-                    # 🔥 修正 2：完美封裝新版 SDK 規定的官方標準安全過濾器物件
                     safety_settings=[
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
@@ -156,7 +159,6 @@ def ask_jarvis(user_id, content_part, mime_type=None):
                     ]
                 )
             )
-            
             response = chat.send_message(message=message_payload)
             
             if response.text:
@@ -164,18 +166,14 @@ def ask_jarvis(user_id, content_part, mime_type=None):
                 USER_CHAT_HISTORIES[user_id] = chat.get_history()
                 success = True
                 print(f"✅ 第 {current_key_idx + 1} 把金鑰運算成功！", flush=True)
-                
-                if len(USER_CHAT_HISTORIES[user_id]) > 20:
-                    USER_CHAT_HISTORIES[user_id] = USER_CHAT_HISTORIES[user_id][-20:]
-                    print(f"✂️ [日常記憶修剪] 已自動裁切日常對話，永久專案記憶依舊安全鎖定。", flush=True)
+                break
             else:
-                print(f"⚠️ 金鑰 {current_key_idx + 1} 回傳了空文字，準備切換金鑰。", flush=True)
+                print(f"⚠️ 金鑰 {current_key_idx + 1} 回傳空文字，自動切換。", flush=True)
                 switch_to_next_key()
                 failed_keys_count += 1
                 
         except APIError as e:
-            # 加上 flush=True 讓我們在 Render 清楚看到 Google 到底拋出什麼拒絕錯誤碼
-            print(f"⚠️ 第 {current_key_idx + 1} 把金鑰受阻 (錯誤碼: {e.code})，詳細訊息: {e.message}", flush=True)
+            print(f"⚠️ 第 {current_key_idx + 1} 把金鑰受阻 (錯誤碼: {e.code})，原因: {e.message}", flush=True)
             switch_to_next_key()
             failed_keys_count += 1
         except Exception as e:
