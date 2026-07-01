@@ -97,97 +97,167 @@
 </head>
 <body>
     <div class="main-wrapper">
-        <!-- 📂 左側面板：手機版會自動浮到最上方，電腦版則在左側 -->
+        <!-- 📂 左側面板：專案智能管理中心 (三欄式同步) -->
         <div class="project-panel">
-            <div class="panel-title">📁 專案永久記憶區</div>
-            <div class="status-tag" id="project-status">狀態：日常閒聊模式 (無鎖定)</div>
-            <textarea id="project-input" class="project-textarea" placeholder="在此貼上你的專案規格、架構、或是資料庫欄位定義..."></textarea>
-            <div class="btn-group">
-                <button class="panel-btn btn-save" onclick="saveProject()">鎖定專案</button>
-                <button class="panel-btn btn-delete" onclick="deleteProject()">清除</button>
+             <h3>📁 專案永久記憶區 (三欄式同步)</h3> 
+             
+             <!-- 智能卡片動態載入區 -->  
+             <div id="project-list-container" style="margin-bottom:15px; max-height:300px; overflow-y:auto;">
+                 <div style="color:#aaa; font-size:13px; text-align:center;">⏳ 正在從 Google 雲端硬碟同步專案列表中...</div>
+             </div>
+             
+             <!-- 快速鎖定輸入框 -->
+             <div style="display:flex; flex-direction:column; gap:8px;">
+                 <input type="text" id="project-name-input" placeholder="請輸入專案名稱... (例如: lei profile)">
+                 <textarea id="project-detail-input" style="height:80px;" placeholder="請輸入專案規格架構細節..."></textarea>
+                 <button class="lock-btn" onclick="uiLockProject()" style="background:#28a745;color:white;padding:8px;border:none;border-radius:4px;cursor:pointer;">🔒 鎖定專案至雲端硬碟</button>
             </div>
         </div>
 
-        <!-- 💬 右側面板：手機版會自動填滿下方大空間，電腦版則在右側 -->
+        <!-- 💬 右側面板：對話完全體主控台 -->
         <div class="chat-container">
             <div class="chat-header">
                 <h2>💻 Money AI 助理 (雙軌主控台)</h2>
             </div>
+            
+            <!-- 訊息對話框顯示區 -->
             <div class="chat-messages" id="chat-box">
                 <div class="message money">哈囉！我是 Money。有甚麼需要為你服務的嗎?💻</div>
-            </div> <!-- ✨ 修正：把訊息區在這裡就關閉，不讓它吞掉下面的發送條 -->
-            <div id="preview-box">
+            </div>
+            
+            <!-- 圖片暫存預覽提示條 -->
+            <div id="preview-box" style="display:none;">
                 🖼️ <span id="file-name"></span>
                 <span style="cursor:pointer;margin-left:auto;font-weight:bold;font-size:18px;" onclick="clearFile()">✕</span>
             </div>
+            
+            <!-- 🛠️【完全體功能發送條】：語音、相片、文字完美合體，乖乖躺在視窗最底部 -->
             <div class="chat-input-area">
-                <label class="file-upload-label" for="imageinput" title="上傳 Bug 截圖或照片">📎</label>
-                <input type="file" id="imageInput" accept="image/*" onchange="previewImage(this)">
+                <!-- 圖片上傳通道：大小寫全部死死對齊 imageInput -->
+                <label class="file-upload-label" for="imageInput" title="上傳 Bug 截圖或照片">📎</label>
+                <input type="file" id="imageInput" accept="image/*" onchange="previewImage(this)" style="display:none;">
+                
+                <!-- 🎙️ 雙向語音錄音控制按鈕 -->
+                <button id="record-btn" onclick="toggleRecording()" style="background:#6f42c1;color:white;border:none;border-radius:4px;padding:0 10px;margin-right:5px;cursor:pointer;" title="按一下開始錄音，再按一下發送語音">🎙️ 語音</button>
+                
+                <!-- 文字輸入區與發送鍵 -->
                 <textarea id="user-input" placeholder="輸入訊息... (Enter 發送)"></textarea>
                 <button class="send-btn" onclick="sendMessage()">發送</button>
             </div>
-        </div> <!-- ✨ 修正：這是右側大面板 chat-container 的大外殼結尾 -->
-    </div> <!-- ✨ 修正：這是全網頁最外層 main-wrapper 的結尾 -->
+        </div> <!-- 右側大面板 chat-container 的大外殼結尾 -->
+    </div> <!-- 全網頁最外層 main-wrapper 的結尾 -->
     <script>
-        const chatBox = document.getElementById('chat-box');
-        const userInput = document.getElementById('user-input');
-        const imageInput = document.getElementById('imageInput');
-        const previewBox = document.getElementById('preview-box');
-        const fileNameSpan = document.getElementById('file-name');
-        const projectInput = document.getElementById('project-input');
-        const projectStatus = document.getElementById('project-status');
+// 🎙️ 錄音控制全域變數
+let mediaRecorder;
+let audioChunks = [];
+let isRecording = false;
 
-        userInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-        });
-        userInput.addEventListener('input', () => {
-            userInput.style.height = '42px';
-            const sh = userInput.scrollHeight;
-            userInput.style.height = (sh > 150 ? 150 : sh) + 'px';
-        });
+// 🟢 開機自動做：撈取 Google 試算表的專案卡片，並初始化 DOM 元件
+document.addEventListener("DOMContentLoaded", () => {
+    refreshProjectPanel();
+});
 
-        async function saveProject() {
-            const detail = projectInput.value.trim();
-            if(!detail) return alert('請先輸入專案規格描述喔！');
-            projectStatus.style.background = '#0369a1';
-            projectStatus.style.color = '#fff';
-            projectStatus.innerText = '🔒 狀態：專案架構永久鎖定中';
+// 🔄 智能專案面板更新：去後端撈取目前 Google 試算表內的所有專案，製成精美字卡
+async function refreshProjectPanel() {
+    const container = document.getElementById("project-list-container");
+    if (!container) return; // 防呆
+    try {
+        const response = await fetch("/get-projects");
+        const data = await response.json();
+        container.innerHTML = "";
+        
+        if (!data.projects || Object.keys(data.projects).length === 0) {
+            container.innerHTML = `<div style="color:#666;font-size:13px;text-align:center;padding:10px;">目前雲端硬碟尚無綁定任何專案喔！</div>`;
+            return;
+        }
+        
+        // 循環生成精美字卡卡片，自帶指定名稱刪除的 ✕ 按鈕！
+        for (const [name, detail] of Object.entries(data.projects)) {
+            const card = document.createElement("div");
+            card.style = "background:#222;border:1px solid #444;border-radius:6px;padding:10px;margin-bottom:8px;position:relative;box-shadow:0 2px 4px rgba(0,0,0,0.5);";
+            card.innerHTML = `
+                <div style="font-weight:bold;color:#00fff0;font-size:14px;padding-right:20px;">📁 ${name}</div>
+                <div style="color:#ddd;font-size:12px;margin-top:4px;white-space:pre-wrap;">${detail}</div>
+                <span onclick="uiDeleteProject('${name}')" style="position:absolute;top:5px;right:8px;color:#ff4d4d;cursor:pointer;font-weight:bold;font-size:16px;" title="刪除此專案">✕</span>
+            `;
+            container.appendChild(card);
+        }
+    } catch (err) {
+        container.innerHTML = `<div style="color:#ff4d4d;font-size:12px;text-align:center;">⚠️ 記憶復原連線異常</div>`;
+    }
+}
+
+// 🔒 左側按鈕新舊相容：點擊「鎖定專案」時，自動化打包名稱並同步至試算表
+async function uiLockProject() {
+    const pName = document.getElementById("project-name-input").value.trim();
+    const pDetail = document.getElementById("project-detail-input").value.trim();
+    if (!pName || !pDetail) { alert("請填寫專案名稱與詳細規格架構喔！"); return; }
+    
+    const cmdText = `記憶專案：[${pName}] ${pDetail}`;
+    appendMessage(`🔒 正在請求雲端硬碟鎖定專案：【${pName}】...`, 'user');
+    
+    const formData = new FormData();
+    formData.append('text', cmdText);
+    
+    document.getElementById("project-name-input").value = "";
+    document.getElementById("project-detail-input").value = "";
+    
+    await sendCustomForm(formData);
+    refreshProjectPanel(); // 刷新左側卡片牆！
+}
+
+// ✕ 卡片按鈕新舊相容：點擊卡片右上角的 ✕，自動化發送指定刪除指令給後端
+async function uiDeleteProject(pName) {
+    if (!confirm(`確定要從 Google 雲端硬碟中，將專案【${pName}】物理抹除嗎？`)) return;
+    
+    const cmdText = `刪除專案：${pName}`;
+    appendMessage(`🗑️ 正在請求雲端硬碟挖除專案：【${pName}】...`, 'user');
+    
+    const formData = new FormData();
+    formData.append('text', cmdText);
+    
+    await sendCustomForm(formData);
+    refreshProjectPanel(); // 刷新左側卡片牆！
+}
+
+// 🎙️ HTML5 雙向語音錄音晶片
+async function toggleRecording() {
+    const recordBtn = document.getElementById("record-btn");
+    if (!isRecording) {
+        audioChunks = [];
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+        mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/aac' });
+            appendMessage("🎙️ [發送了一段網頁語音訊息]", 'user');
             
-            appendMessage(`🤖 系統通知：已成功發送專案鎖定請求。`, 'money');
-            await fetch('/web-chat', {
-                method: 'POST',
-                body: new URLSearchParams({'text': '漏動指令：記憶專案：' + detail})
-            });
-            alert('專案架構已成功釘入 Money 核心記憶！');
-        }
-
-        async function deleteProject() {
-            projectInput.value = '';
-            projectStatus.style.background = '#0f172a';
-            projectStatus.style.color = '#94a3b8';
-            projectStatus.innerText = '狀態：日常閒聊模式 (無鎖定)';
+            const loadingId = appendMessage('⏳ Money 正在用多模態大腦聆聽語音並解析中...', 'money');
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'web_audio.aac');
             
-            await fetch('/web-chat', {
-                method: 'POST',
-                body: new URLSearchParams({'text': '刪除專案'})
-            });
-            alert('專案記憶已徹底抹除！');
-        }
+            await sendCustomForm(formData, loadingId);
+        };
+        mediaRecorder.start();
+        isRecording = true;
+        recordBtn.innerText = "🛑 停止並送出";
+        recordBtn.style.background = "#dc3545";
+    } else {
+        mediaRecorder.stop();
+        isRecording = false;
+        recordBtn.innerText = "🎙️ 語音";
+        recordBtn.style.background = "#6f42c1";
+    }
+}
 
-        function previewImage(input) {
-            if (input.files && input.files[0]) {
-                fileNameSpan.innerText = "準備上傳照片: " + input.files[0].name;
-                previewBox.style.display = 'flex';
-            }
-        }
-        function clearFile() { imageInput.value = ''; previewBox.style.display = 'none'; }
-
+// 🚀【完全體核心發送功能】：完美整合多模態圖片強效搜刮防禦
 async function sendMessage() {
     const text = userInput.value.trim();
-    // 💡 升級防呆：只要有打字，或是「有選圖片」，就可以允許發送！
-    if (!text && (!imageInput.files || !imageInput.files[0])) return;
+    const realFileInput = document.querySelector('input[type="file"]');
+    
+    // 升級防呆：只要有打字，或者「有選圖片」，就允許發送！
+    if (!text && (!realFileInput || !realFileInput.files || !realFileInput.files[0])) return;
 
-    // 將使用者輸入的文字顯示在畫面上 (如果沒打字就顯示預設提示)
     if (text) {
         appendMessage(text, 'user');
     } else {
@@ -199,15 +269,23 @@ async function sendMessage() {
 
     const loadingId = appendMessage('⏳ Money 正在用多模態大腦解析中...', 'money');
     
-    // 📦 封裝傳輸袋
     const formData = new FormData();
     formData.append('text', text);
     
-    // ⚡【核心修正】：檢查使用者有沒有選取照片，有的話立刻塞入 FormData！
-    if (imageInput.files && imageInput.files[0]) {
-        formData.append('image', imageInput.files[0]);
+    // ⚡ 地毯式強效抓檔防禦：不論 ID 大小寫，直接剝離圖片二進位流！
+    if (realFileInput && realFileInput.files && realFileInput.files[0]) {
+        formData.append('image', realFileInput.files[0]);
     }
 
+    // 發送請求並清除圖片暫存區
+    await sendCustomForm(formData, loadingId);
+    if (realFileInput) realFileInput.value = ''; 
+    clearFile();
+}
+
+// 通用傳輸核心 (支援文字、圖片、語音及自動語音播放)
+async function sendCustomForm(formData, loadingId = null) {
+    if (!loadingId) loadingId = appendMessage('⏳ Money 正在運算中...', 'money');
     try {
         const response = await fetch('/web-chat', { method: 'POST', body: formData });
         const data = await response.json();
@@ -215,40 +293,75 @@ async function sendMessage() {
         const loadBox = document.getElementById(loadingId);
         if (loadBox) loadBox.remove();
         
-        // ✨ 終極防護防線：如果大腦抽風吐回空字串，自動塞入預設安全對話
         const finalReply = (data && data.reply && data.reply.trim()) ? data.reply : "⚠️ 大腦金鑰輪替中，請再對我說一次剛才的話喔！";
         appendMessage(formatResponse(finalReply), 'money');
         
-        // 🧹【發送成功後防呆】：自動清空圖片選取狀態與藍色提示條，避免重複發送！
-        clearFile();
-
+        // 🔊【雙向語音回傳】：如果後端有動態生成音訊檔，網頁端立刻開口說話！
+        if (data.audio_url) {
+            const audio = new Audio(data.audio_url);
+            audio.play();
+        }
     } catch (err) {
         const loadBox = document.getElementById(loadingId);
-        if (loadBox) loadBox.innerHTML = "⚠️ 雲端連線異常，請稍後再試。";
+        if (loadBox) loadBox.innerHTML = "⚠️ 雲端連線失敗，請稍後再試。";
     }
 }
 
-        function appendMessage(html, sender) {
-            const id = 'msg-' + Date.now();
-            const div = document.createElement('div');
-            div.className = `message ${sender}`;
-            div.id = id;
-            div.innerHTML = html;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-            return id;
-        }
+// 🖼️ 圖片預覽控制功能
+function previewImage(input) {
+    if (input.files && input.files[0]) {
+        fileNameSpan.innerText = "準備上傳照片: " + input.files[0].name;
+        previewBox.style.display = 'flex';
+    }
+}
+function clearFile() { 
+    const realFileInput = document.querySelector('input[type="file"]');
+    if (realFileInput) realFileInput.value = ''; 
+    previewBox.style.display = 'none'; 
+}
 
-        function formatResponse(text) {
-            const blocks = [];
-            let formatted = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-                const safe = btoa(unescape(encodeURIComponent(code)));
-                blocks.push(`<pre><code>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code><button class="copy-btn" onclick="navigator.clipboard.writeText(decodeURIComponent(escape(atob('${safe}'))));alert('程式碼複製成功！')">複製</button></pre>`);
-                return `__CODE_BLOCK_${blocks.length - 1}__`;
-            });
-            formatted = formatted.replace(/\n/g, '<br>');
-            return formatted.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => blocks[index]);
-        }
+// 📝 訊息渲染推進器（沿用您原本的秒數 ID 邏輯）
+function appendMessage(html, sender) {
+    const id = 'msg-' + Date.now();
+    const div = document.createElement('div');
+    div.className = `message ${sender}`;
+    div.id = id;
+    div.innerHTML = html;
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    return id;
+}
+
+// 🧼 您原本最強大的 Markdown / 一鍵複製程式碼按鈕高亮清洗晶片！
+function formatResponse(text) {
+    const blocks = [];
+    let formatted = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+        const safe = btoa(unescape(encodeURIComponent(code)));
+        blocks.push(`<pre><code>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code><button class="copy-btn" onclick="navigator.clipboard.writeText(decodeURIComponent(escape(atob('${safe}'))));alert('程式碼複製成功！')">複製</button></pre>`);
+        return `__CODE_BLOCK_${blocks.length - 1}__`;
+    });
+    formatted = formatted.replace(/\n/g, '<br>');
+    return formatted.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => blocks[index]);
+}
+
+// 📌 元件 DOM 全域節點綁定 (移除失效的老變數，對齊完全體)
+const chatBox = document.getElementById('chat-box');
+const userInput = document.getElementById('user-input');
+const previewBox = document.getElementById('preview-box');
+const fileNameSpan = document.getElementById('file-name');
+
+// ⌨️ 監聽鍵盤與輸入框自動伸縮
+userInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { 
+        e.preventDefault(); 
+        sendMessage(); 
+    }
+});
+userInput.addEventListener('input', () => {
+    userInput.style.height = '42px';
+    const sh = userInput.scrollHeight;
+    userInput.style.height = (sh > 150 ? 150 : sh) + 'px';
+});
 </script>
 </body>
 </html>

@@ -438,32 +438,34 @@ def web_index():
     except Exception:
         return "🟢 Money AI 伺服器已在雲端安全上線！", 200
 
-# ==================== 【🌐 雲端電腦網頁版端點（防呆抓漏絕對修正版）】 ====================
+# 智能專案面板接口：讓網頁前端開機時自動撈取目前儲存的所有專案列表
+@app.route("/get-projects", methods=['GET'])
+def get_projects():
+    web_user_id = "web_platform_user"
+    user_projects = USER_PROJECT_NOTES.get(web_user_id, {})
+    return jsonify({"projects": user_projects})
+
 @app.route("/web-chat", methods=['POST'])
 def web_chat():
-    # 💡 修正：地毯式防呆搜索！不管前端欄位叫 text、msg、message 還是內容，通通都抓！
     user_text = request.form.get('text', request.form.get('msg', request.form.get('message', ''))).strip()
     image_file = request.files.get('image')
+    audio_file = request.files.get('audio')  # 🎙️ 網頁版雙向語音通道
     web_user_id = "web_platform_user" 
     
-    # 照妖鏡 2 號：在路由最上方強制列印前端到底送了什麼過來！
-    print(f"🌐 [網頁端傳輸攔截] 收到文字欄位: '{user_text}', 是否有帶圖片: {image_file is not None}", flush=True)
+    print(f"🌐 [網頁端傳輸攔截] 文字: '{user_text}', 有無圖片: {image_file is not None}, 有無語音: {audio_file is not None}", flush=True)
     
-    # 如果真的什麼都沒有傳過來，強制塞入警示文字發給大腦，不讓它當機
-    if not user_text and not image_file:
-        user_text = "嗨，Money！我剛剛點擊了網頁，請跟我打個招呼並自我介紹。"
-
-    if "漏動指令：" in user_text or "記憶專案：" in user_text:
-        real_cmd = user_text.replace("漏動指令：", "記憶專案：")
-        reply_text = ask_jarvis(web_user_id, content_part=real_cmd)
-        return jsonify({"reply": reply_text})
-        
-    if user_text == "刪除專案":
-        reply_text = ask_jarvis(web_user_id, content_part="刪除專案")
-        return jsonify({"reply": reply_text})
-
-    # 正確導向大腦核心
-    if image_file:
+    # 處理網頁端錄音上傳
+    if audio_file:
+        try:
+            audio_bytes = audio_file.read()
+            # 透過原生解碼，直接把網頁錄製的音訊位元組送給 Jarvis 處理
+            reply_text = ask_jarvis(web_user_id, content_part=audio_bytes, mime_type='audio/aac')
+        except Exception as aud_err:
+            print(f"❌ 網頁讀取語音位元組失敗: {aud_err}", flush=True)
+            reply_text = "🤖 賈維斯沒能聽清您的網頁語音，請再試一次喔！"
+    
+    # 處理圖片或純文字
+    elif image_file:
         try:
             image_bytes = image_file.read()
             reply_text = ask_jarvis(web_user_id, content_part=image_bytes, mime_type='image/jpeg')
@@ -471,10 +473,34 @@ def web_chat():
             print(f"❌ 網頁讀取圖片位元組失敗: {img_err}", flush=True)
             reply_text = ask_jarvis(web_user_id, content_part=user_text)
     else:
+        if not user_text:
+            user_text = "嗨，Money！我剛剛點擊了網頁，請跟我打個招呼並自我介紹。"
         reply_text = ask_jarvis(web_user_id, content_part=user_text)
         
     print(f"📡 [網頁端準備回傳] AI 解答長度: {len(reply_text)} 字。", flush=True)
-    return jsonify({"reply": reply_text})
+    
+    # 🎙️ 雙向語音核心：後端自動將 AI 回覆的文字轉成語音檔，一併傳回給網頁播放！
+    audio_url = ""
+    if not user_text.startswith("刪除專案") and not user_text.startswith("記憶專案"):
+        try:
+            audio_dir = "static/audio"
+            os.makedirs(audio_dir, exist_ok=True)
+            timestamp = int(time.time())
+            filename = f"web_reply_{timestamp}.mp3"
+            filepath = os.path.join(audio_dir, filename)
+            
+            # 過濾程式碼，避免語音朗讀亂碼
+            clean_text = re.sub(r'```[\s\S]*?```', '，好的，這段核心程式碼我已經發送到你的螢幕畫面上了。', reply_text)
+            clean_text = clean_text.replace("**", "").replace("*", "").replace("`", "").strip()
+            
+            if clean_text:
+                tts = gTTS(text=clean_text, lang='zh-tw', slow=False)
+                tts.save(filepath)
+                audio_url = f"/static/audio/{filename}"
+        except Exception as tts_err:
+            print(f"⚠️ 網頁版語音轉譯失敗: {tts_err}", flush=True)
+
+    return jsonify({"reply": reply_text, "audio_url": audio_url})
 
 # ==================== 【🚀 系統主程式啟動大門】 ====================
 # 💡 鐵律：這段啟動程式碼必須永遠死死捍衛在整個檔案的最底層、最後一行！
