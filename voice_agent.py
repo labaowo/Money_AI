@@ -53,21 +53,42 @@ if not API_KEYS and os.getenv("GEMINI_API_KEY"):
 print(f"🔑 系統初始化成功：地毯式搜索完畢！已成功載入 {len(API_KEYS)} 組完全獨立的 API 金鑰進行輪替。", flush=True)
 
 current_key_idx = 0
+import gspread
+from google.oauth2.service_account import Credentials
+
 USER_CHAT_HISTORIES = {}
 USER_PROJECT_NOTES = {}
-# 📂 真．永久記憶控制中心：開機時自動從硬碟恢復專案資料
-PROJECT_NOTES_FILE = "project_notes.json"
 
-if os.path.exists(PROJECT_NOTES_FILE):
-    try:
-        with open(PROJECT_NOTES_FILE, "r", encoding="utf-8") as f:
-            USER_PROJECT_NOTES = json.load(f)
-        print(f"💾 [真．永久記憶] 成功從硬碟喚醒 {len(USER_PROJECT_NOTES)} 位用戶的專案記憶規格！", flush=True)
-    except Exception as json_err:
-        print(f"⚠️ [真．永久記憶] 讀取備份檔失敗: {json_err}", flush=True)
-        USER_PROJECT_NOTES = {}
-else:
-    USER_PROJECT_NOTES = {} 
+# ☁️ 【真．雲端硬碟控制中心】：綁定您的 Google 試算表
+GOOGLE_SPREADSHEET_ID = "1BtczApamJO4cdvAPu_1BRbyml64MrgtXlF5bupjs3gk"
+
+try:
+    # ⚡【這次真的改對了！】：精準開通 Google 官方試算表特許讀寫通道
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    
+    # 讀取與主程式躺在一起的免綁卡憑證金鑰
+    creds = Credentials.from_service_account_file("google_creds.json", scopes=scopes)
+    gc = gspread.authorize(creds)
+    sht = gc.open_by_key(GOOGLE_SPREADSHEET_ID)
+    wks = sht.sheet1  # 鎖定第一個分頁
+
+    # 💡 終極開荒防呆：如果您的試算表目前完全是空的，自動幫您鋪好欄位骨架！
+    if not wks.get_all_values():
+        wks.append_row(["user_id", "project_detail"])
+        print("📊 [Google硬碟初始化] 偵測到空試算表，已自動建立標準欄位骨架！", flush=True)
+
+    # 📡 地毯式搜刮：將雲端試算表上的歷史資料，一秒載入記憶體
+    all_records = wks.get_all_records()
+    for row in all_records:
+        if row.get('user_id'):
+            USER_PROJECT_NOTES[str(row['user_id'])] = str(row['project_detail'])
+            
+    print(f"☁️ [Google硬碟連線成功] 成功從您的雲端硬碟復原 {len(USER_PROJECT_NOTES)} 位用戶的永久專案規格！", flush=True)
+
+except Exception as g_err:
+    print(f"⚠️ 連接您的 Google 雲端硬碟失敗: {g_err}", flush=True)
+    USER_PROJECT_NOTES = {}
+
 BASE_URL = os.getenv("BASE_URL", "https://onrender.com")
 
 def get_current_client():
@@ -111,35 +132,43 @@ def ask_jarvis(user_id, content_part, mime_type=None):
     if user_id not in USER_CHAT_HISTORIES: USER_CHAT_HISTORIES[user_id] = []
     if user_id not in USER_PROJECT_NOTES: USER_PROJECT_NOTES[user_id] = ""
 
-    # 2. 檢查使用者特殊指令（升級：硬碟同步防禦版）
+    # 2. 檢查使用者特殊指令（升級：Google 雲端硬碟試算表實體同步版）
     if not mime_type and isinstance(content_part, str):
         if content_part.startswith("記憶專案：") or content_part.startswith("記憶專案:"):
             project_detail = content_part.split("：", 1)[-1].split(":", 1)[-1].strip()
             USER_PROJECT_NOTES[user_id] = project_detail
             
-            # ⚡ 核心黑科技：每次記憶，強制寫入雲端硬碟，阻斷重啟失憶症
+            # ⚡ 核心黑科技：每次記憶，強制寫入您的 Google 雲端硬碟試算表！
             try:
-                with open(PROJECT_NOTES_FILE, "w", encoding="utf-8") as f:
-                    json.dump(USER_PROJECT_NOTES, f, ensure_ascii=False, indent=4)
-                print(f"📝 用戶 {user_id} 成功鎖定專案記憶，並已實體化寫入硬碟備份。", flush=True)
-            except Exception as fs_err:
-                print(f"⚠️ 硬碟寫入失敗（但不影響本次對話）: {fs_err}", flush=True)
+                # 尋找該用戶是否已經在試算表的第一欄（user_id 欄位）存在
+                cell = wks.find(user_id, in_column=1)
+                if cell:
+                    wks.update_cell(cell.row, 2, project_detail) # 存在就即時覆寫第二欄的專案規格
+                    print(f"📝 用戶 {user_id} 成功變更記憶，已即時覆寫您的 Google 試算表第 {cell.row} 行！", flush=True)
+                else:
+                    wks.append_row([user_id, project_detail]) # 不存在就直接在最下面追加新的一行
+                    print(f"📝 用戶 {user_id} 成功建立全新記憶，已同步寫入您的 Google 試算表最底層！", flush=True)
+            except Exception as g_err:
+                print(f"⚠️ 同步寫入您的 Google 雲端試算表失敗: {g_err}", flush=True)
                 
-            return f"📂 【專案記憶成功】Money 已將此專案架構永久鎖定至雲端硬碟！\n\n📌 架構：\n{project_detail}"
+            return f"📂 【專案記憶成功】Money 已將此專案架構永久鎖定至您的 Google 雲端硬碟！\n\n📌 架構：\n{project_detail}"
         
         if content_part.strip() == "刪除專案":
             if USER_PROJECT_NOTES.get(user_id):
                 USER_PROJECT_NOTES[user_id] = ""
                 
-                # ⚡ 核心黑科技：刪除時，同步更新硬碟檔案
+                # ⚡ 核心黑科技：刪除時，同步將該行在 Google 試算表上物理抹除
                 try:
-                    with open(PROJECT_NOTES_FILE, "w", encoding="utf-8") as f:
-                        json.dump(USER_PROJECT_NOTES, f, ensure_ascii=False, indent=4)
-                    print(f"🗑️ 用戶 {user_id} 已手動清空永久專案記憶，硬碟已同步抹除。", flush=True)
-                except Exception as fs_err:
-                    print(f"⚠️ 硬碟同步抹除失敗: {fs_err}", flush=True)
+                    cell = wks.find(user_id, in_column=1)
+                    if cell:
+                        wks.delete_rows(cell.row) # 找到該用戶，直接整列刪除，不留痕跡
+                        print(f"🗑️ 用戶 {user_id} 已清空記憶，您的 Google 試算表第 {cell.row} 行已同步刪除！", flush=True)
+                    else:
+                        print(f"⚠️ 用戶 {user_id} 意圖刪除記憶，但您的 Google 試算表裡本來就找不到他。", flush=True)
+                except Exception as g_err:
+                    print(f"⚠️ 同步抹除您的 Google 雲端試算表失敗: {g_err}", flush=True)
                     
-                return "🗑️ 【專案記憶已清空】目前的專案架構已從硬碟與永久記憶區徹底抹除囉！"
+                return "🗑️ 【專案記憶已清空】目前的專案架構已從您的 Google 雲端硬碟與記憶區徹底抹除囉！"
             return "❌ 報告主人，目前本來就沒有綁定任何專案喔！"
 
     # 3. 數據格式封裝
