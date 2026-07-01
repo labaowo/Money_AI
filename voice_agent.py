@@ -132,10 +132,9 @@ def ask_jarvis(user_id, content_part, mime_type=None):
     reply_text = "⚠️ 賈維斯大腦目前嚴重超載，請幫我等待 30 秒後再試一次喔！"
     
     if user_id not in USER_CHAT_HISTORIES: USER_CHAT_HISTORIES[user_id] = []
-    if user_id not in USER_PROJECT_NOTES: USER_PROJECT_NOTES[user_id] = ""
-
-    # 2. 檢查使用者特殊指令（升級：多專案指定增刪實體同步版）
-    if user_id not in USER_PROJECT_NOTES: 
+    
+    # 🛡️ 終極型態防禦：如果不在裡面，或者發現殘留舊版的純文字，強制洗成乾淨的新版字典！
+    if user_id not in USER_PROJECT_NOTES or isinstance(USER_PROJECT_NOTES.get(user_id), str):
         USER_PROJECT_NOTES[user_id] = {}
 
     if not mime_type and isinstance(content_part, str):
