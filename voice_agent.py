@@ -63,7 +63,7 @@ USER_PROJECT_NOTES = {}  # 格式會變成：{ "用戶ID": { "專案A": "詳情"
 GOOGLE_SPREADSHEET_ID = "1BtczApamJO4cdvAPu_1BRbyml64MrgtXlF5bupjs3gk"
 
 try:
-    scopes = ["https://googleapis.com"]
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_file("google_creds.json", scopes=scopes)
     gc = gspread.authorize(creds)
     sht = gc.open_by_key(GOOGLE_SPREADSHEET_ID)
