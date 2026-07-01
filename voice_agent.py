@@ -57,33 +57,35 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 USER_CHAT_HISTORIES = {}
-USER_PROJECT_NOTES = {}
+USER_PROJECT_NOTES = {}  # 格式會變成：{ "用戶ID": { "專案A": "詳情", "專案B": "詳情" } }
 
 # ☁️ 【真．雲端硬碟控制中心】：綁定您的 Google 試算表
 GOOGLE_SPREADSHEET_ID = "1BtczApamJO4cdvAPu_1BRbyml64MrgtXlF5bupjs3gk"
 
 try:
-    # ⚡【這次真的改對了！】：精準開通 Google 官方試算表特許讀寫通道
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    
-    # 讀取與主程式躺在一起的免綁卡憑證金鑰
+    scopes = ["https://googleapis.com"]
     creds = Credentials.from_service_account_file("google_creds.json", scopes=scopes)
     gc = gspread.authorize(creds)
     sht = gc.open_by_key(GOOGLE_SPREADSHEET_ID)
     wks = sht.sheet1  # 鎖定第一個分頁
 
-    # 💡 終極開荒防呆：如果您的試算表目前完全是空的，自動幫您鋪好欄位骨架！
+    # 💡 三欄式開荒防呆：自動鋪好 user_id、project_name、project_detail 欄位！
     if not wks.get_all_values():
-        wks.append_row(["user_id", "project_detail"])
-        print("📊 [Google硬碟初始化] 偵測到空試算表，已自動建立標準欄位骨架！", flush=True)
+        wks.append_row(["user_id", "project_name", "project_detail"])
+        print("📊 [Google硬碟初始化] 偵測到空試算表，已自動建立三欄式商用骨架！", flush=True)
 
-    # 📡 地毯式搜刮：將雲端試算表上的歷史資料，一秒載入記憶體
+    # 📡 地毯式載入：將雲端試算表上的所有多專案歷史資料，一秒載入雙層記憶體
     all_records = wks.get_all_records()
     for row in all_records:
-        if row.get('user_id'):
-            USER_PROJECT_NOTES[str(row['user_id'])] = str(row['project_detail'])
+        uid = str(row.get('user_id', '')).strip()
+        pname = str(row.get('project_name', '')).strip()
+        pdetail = str(row.get('project_detail', '')).strip()
+        if uid and pname:
+            if uid not in USER_PROJECT_NOTES:
+                USER_PROJECT_NOTES[uid] = {}
+            USER_PROJECT_NOTES[uid][pname] = pdetail
             
-    print(f"☁️ [Google硬碟連線成功] 成功從您的雲端硬碟復原 {len(USER_PROJECT_NOTES)} 位用戶的永久專案規格！", flush=True)
+    print(f"☁️ [Google硬碟連線成功] 成功從雲端復原 {len(USER_PROJECT_NOTES)} 位用戶的所有多專案記憶！", flush=True)
 
 except Exception as g_err:
     print(f"⚠️ 連接您的 Google 雲端硬碟失敗: {g_err}", flush=True)
@@ -132,44 +134,81 @@ def ask_jarvis(user_id, content_part, mime_type=None):
     if user_id not in USER_CHAT_HISTORIES: USER_CHAT_HISTORIES[user_id] = []
     if user_id not in USER_PROJECT_NOTES: USER_PROJECT_NOTES[user_id] = ""
 
-    # 2. 檢查使用者特殊指令（升級：Google 雲端硬碟試算表實體同步版）
+    # 2. 檢查使用者特殊指令（升級：多專案指定增刪實體同步版）
+    if user_id not in USER_PROJECT_NOTES: 
+        USER_PROJECT_NOTES[user_id] = {}
+
     if not mime_type and isinstance(content_part, str):
-        if content_part.startswith("記憶專案：") or content_part.startswith("記憶專案:"):
-            project_detail = content_part.split("：", 1)[-1].split(":", 1)[-1].strip()
-            USER_PROJECT_NOTES[user_id] = project_detail
+        user_msg = content_part.strip()
+
+        # 📂 【通道 A：新增/修改指定專案】
+        # 指令格式：記憶專案：[專案名稱] 專案內容描述
+        if user_msg.startswith("記憶專案：") or user_msg.startswith("記憶專案:"):
+            raw_content = user_msg.split("：", 1)[-1].split(":", 1)[-1].strip()
             
-            # ⚡ 核心黑科技：每次記憶，強制寫入您的 Google 雲端硬碟試算表！
+            # 🔍 智慧提取專案名稱：支援 [ ]、【 】、「 」、( )，如果沒寫則預設為 "未命名專案"
+            p_name = "未命名專案"
+            p_detail = raw_content
+            match = re.match(r'[\[【「\((](.*?)[\]】」\))]', raw_content)
+            if match:
+                p_name = match.group(1).strip()
+                p_detail = raw_content.replace(match.group(0), "").strip()
+
+            # 更新本機短期記憶體
+            USER_PROJECT_NOTES[user_id][p_name] = p_detail
+            
+            # ⚡ 同步寫入 Google 試算表（一案一行）
             try:
-                # 尋找該用戶是否已經在試算表的第一欄（user_id 欄位）存在
-                cell = wks.find(user_id, in_column=1)
-                if cell:
-                    wks.update_cell(cell.row, 2, project_detail) # 存在就即時覆寫第二欄的專案規格
-                    print(f"📝 用戶 {user_id} 成功變更記憶，已即時覆寫您的 Google 試算表第 {cell.row} 行！", flush=True)
+                # 點名搜索：尋找同時滿足「user_id」且「第二欄專案名稱吻合」的那一行
+                all_cells = wks.findall(user_id, in_column=1)
+                target_row = None
+                for c in all_cells:
+                    if str(wks.cell(c.row, 2).value).strip() == p_name:
+                        target_row = c.row
+                        break
+                
+                if target_row:
+                    wks.update_cell(target_row, 3, p_detail) # 專案存在，更新第三欄規格詳情
+                    print(f"📝 用戶 {user_id} 成功覆寫專案【{p_name}】的記憶。", flush=True)
                 else:
-                    wks.append_row([user_id, project_detail]) # 不存在就直接在最下面追加新的一行
-                    print(f"📝 用戶 {user_id} 成功建立全新記憶，已同步寫入您的 Google 試算表最底層！", flush=True)
+                    wks.append_row([user_id, p_name, p_detail]) # 專案不存在，追加一行新紀錄
+                    print(f"📝 用戶 {user_id} 成功建立全新專案【{p_name}】並佔用新行。", flush=True)
             except Exception as g_err:
-                print(f"⚠️ 同步寫入您的 Google 雲端試算表失敗: {g_err}", flush=True)
+                print(f"⚠️ Google 試算表寫入失敗: {g_err}", flush=True)
                 
-            return f"📂 【專案記憶成功】Money 已將此專案架構永久鎖定至您的 Google 雲端硬碟！\n\n📌 架構：\n{project_detail}"
+            return f"📂 【專案記憶成功】Money 已將專案【{p_name}】鎖定至您的 Google 雲端試算表！\n\n📌 規格：\n{p_detail}"
         
-        if content_part.strip() == "刪除專案":
-            if USER_PROJECT_NOTES.get(user_id):
-                USER_PROJECT_NOTES[user_id] = ""
+        # 🗑️ 【通道 B：指定名稱刪除專案】
+        # 指令格式：刪除專案：專案名稱
+        if user_msg.startswith("刪除專案：") or user_msg.startswith("刪除專案:"):
+            p_name = user_msg.split("：", 1)[-1].split(":", 1)[-1].strip()
+            
+            if not p_name:
+                return "❌ 報告主人，請告訴我要刪除哪一個專案喔！例如：`刪除專案：lei profile`"
+
+            if p_name in USER_PROJECT_NOTES[user_id]:
+                # 擦除本機短期記憶
+                del USER_PROJECT_NOTES[user_id][p_name]
                 
-                # ⚡ 核心黑科技：刪除時，同步將該行在 Google 試算表上物理抹除
+                # ⚡ 同步在 Google 試算表上精準「挖掉這一行」
                 try:
-                    cell = wks.find(user_id, in_column=1)
-                    if cell:
-                        wks.delete_rows(cell.row) # 找到該用戶，直接整列刪除，不留痕跡
-                        print(f"🗑️ 用戶 {user_id} 已清空記憶，您的 Google 試算表第 {cell.row} 行已同步刪除！", flush=True)
-                    else:
-                        print(f"⚠️ 用戶 {user_id} 意圖刪除記憶，但您的 Google 試算表裡本來就找不到他。", flush=True)
+                    all_cells = wks.findall(user_id, in_column=1)
+                    deleted_from_cloud = False
+                    for c in all_cells:
+                        if str(wks.cell(c.row, 2).value).strip() == p_name:
+                            wks.delete_rows(c.row) # 精準物理刪除這行
+                            deleted_from_cloud = True
+                            print(f"🗑️ 已從雲端試算表物理抹除用戶 {user_id} 的專案【{p_name}】！", flush=True)
+                            break
                 except Exception as g_err:
-                    print(f"⚠️ 同步抹除您的 Google 雲端試算表失敗: {g_err}", flush=True)
+                    print(f"⚠️ Google 試算表刪除失敗: {g_err}", flush=True)
                     
-                return "🗑️ 【專案記憶已清空】目前的專案架構已從您的 Google 雲端硬碟與記憶區徹底抹除囉！"
-            return "❌ 報告主人，目前本來就沒有綁定任何專案喔！"
+                return f"🗑️ 【專案抹除成功】屬於您的專案【{p_name}】已從雲端硬碟與記憶區徹底移除囉！"
+            return f"❌ 報告主人，我的雲端大腦裡本來就沒有綁定過叫做【{p_name}】的專案喔！"
+            
+        # 💡 防呆分支：如果只打了「刪除專案」四個字卻沒給名字
+        if user_msg == "刪除專案":
+            return "❌ 報告主人，為了防止誤刪，請帶上專案名稱喔！\n格式：`刪除專案：專案名稱`"
 
     # 3. 數據格式封裝
     if mime_type:
@@ -190,9 +229,12 @@ def ask_jarvis(user_id, content_part, mime_type=None):
         "2. 請使用台灣口語繁體中文與專業術語，拒絕大陸用語。"
     )
     
-    if USER_PROJECT_NOTES[user_id]:
-        base_instruction += f"\n\n🚨【重要專案架構，回答必須圍繞此規格】：\n{USER_PROJECT_NOTES[user_id]}"
-
+    if USER_PROJECT_NOTES.get(user_id):
+        project_strings = ""
+        for name, detail in USER_PROJECT_NOTES[user_id].items():
+            project_strings += f"\n📁 專案名稱：【{name}】\n📌 規格規格：\n{detail}\n" + "-"*30
+        
+        base_instruction += f"\n\n🚨【重要多專案規格架構，回答必須圍繞以下活著的專案】：\n{project_strings}"
     # 🎯 照妖鏡日誌：強制印出目前陣列長度與計數器，抓出為什麼不進迴圈
     print(f"📡 [準備進入思考迴圈] 用戶: {user_id}, 金鑰總數: {len(API_KEYS)}, 當前失敗計數: {failed_keys_count}, 成功狀態: {success}", flush=True)
 
