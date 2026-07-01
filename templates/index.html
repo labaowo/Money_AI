@@ -182,34 +182,51 @@
         }
         function clearFile() { imageInput.value = ''; previewBox.style.display = 'none'; }
 
-        async function sendMessage() {
-            const text = userInput.value.trim();
-            if (!text) return;
+async function sendMessage() {
+    const text = userInput.value.trim();
+    // 💡 升級防呆：只要有打字，或是「有選圖片」，就可以允許發送！
+    if (!text && (!imageInput.files || !imageInput.files[0])) return;
 
-            appendMessage(text, 'user');
-            
-            userInput.value = '';
-            userInput.style.height = '42px';
+    // 將使用者輸入的文字顯示在畫面上 (如果沒打字就顯示預設提示)
+    if (text) {
+        appendMessage(text, 'user');
+    } else {
+        appendMessage("📸 [傳送了一張照片]", 'user');
+    }
+    
+    userInput.value = '';
+    userInput.style.height = '42px';
 
-            const loadingId = appendMessage('⏳ Money 正在用多模態大腦解析中...', 'money');
-            const formData = new FormData();
-            formData.append('text', text);
+    const loadingId = appendMessage('⏳ Money 正在用多模態大腦解析中...', 'money');
+    
+    // 📦 封裝傳輸袋
+    const formData = new FormData();
+    formData.append('text', text);
+    
+    // ⚡【核心修正】：檢查使用者有沒有選取照片，有的話立刻塞入 FormData！
+    if (imageInput.files && imageInput.files[0]) {
+        formData.append('image', imageInput.files[0]);
+    }
 
-            try {
-                const response = await fetch('/web-chat', { method: 'POST', body: formData });
-                const data = await response.json();
-                
-                const loadBox = document.getElementById(loadingId);
-                if (loadBox) loadBox.remove();
-                
-                // ✨ 終極防護防線：如果大腦抽風吐回空字串，自動塞入預設安全對話，阻絕隱形透明框！
-                const finalReply = (data && data.reply && data.reply.trim()) ? data.reply : "⚠️ 大腦金鑰輪替中，請再對我說一次剛才的話喔！";
-                appendMessage(formatResponse(finalReply), 'money');
-            } catch (err) {
-                const loadBox = document.getElementById(loadingId);
-                if (loadBox) loadBox.innerHTML = "⚠️ 雲端連線異常，請稍後再試。";
-            }
-        }
+    try {
+        const response = await fetch('/web-chat', { method: 'POST', body: formData });
+        const data = await response.json();
+        
+        const loadBox = document.getElementById(loadingId);
+        if (loadBox) loadBox.remove();
+        
+        // ✨ 終極防護防線：如果大腦抽風吐回空字串，自動塞入預設安全對話
+        const finalReply = (data && data.reply && data.reply.trim()) ? data.reply : "⚠️ 大腦金鑰輪替中，請再對我說一次剛才的話喔！";
+        appendMessage(formatResponse(finalReply), 'money');
+        
+        // 🧹【發送成功後防呆】：自動清空圖片選取狀態與藍色提示條，避免重複發送！
+        clearFile();
+
+    } catch (err) {
+        const loadBox = document.getElementById(loadingId);
+        if (loadBox) loadBox.innerHTML = "⚠️ 雲端連線異常，請稍後再試。";
+    }
+}
 
         function appendMessage(html, sender) {
             const id = 'msg-' + Date.now();
